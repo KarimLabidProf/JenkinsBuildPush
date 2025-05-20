@@ -20,7 +20,7 @@ node {
         bat "docker run -d --name ${CONTAINER_NAME} -p 83:80 ${IMAGE}"
 
         // Optionnel : attends que le conteneur soit prêt
-        bat 'timeout /t 5 > nul'
+       bat 'ping -n 6 127.0.0.1 > nul'
 
         // Test simple avec curl
         bat 'curl http://localhost:83'
