@@ -1,9 +1,10 @@
 def pipelineContext = [:]
 
 node {
-     def registry = 'registry.gitlab.com'
+    def registry = 'registry.gitlab.com'
     def registryProjet = 'registry.gitlab.com/mygroup4574346/myreg'
-    def IMAGE = "${registryProjet}:version-${env.BUILD_ID}"
+    def IMAGE_VERSION = "${registryProjet}:version-${env.BUILD_ID}"
+    def IMAGE_LATEST = "${registryProjet}:latest"
     def CONTAINER_NAME = "myapp-${env.BUILD_ID}"
     def img
 
@@ -12,31 +13,43 @@ node {
     }
 
     stage('Build') {
-        img = docker.build("${IMAGE}", '.')
+        img = docker.build("${IMAGE_VERSION}", '.')
+        // Taguer aussi en latest localement
+        bat "docker tag ${IMAGE_VERSION} ${IMAGE_LATEST}"
     }
 
     stage('Run Container') {
         // Lance le conteneur en arrière-plan
-        bat "docker run -d --name ${CONTAINER_NAME} -p 83:80 ${IMAGE}"
+        bat "docker run -d --name ${CONTAINER_NAME} -p 83:80 ${IMAGE_VERSION}"
 
-        // Optionnel : attends que le conteneur soit prêt
-       bat 'ping -n 6 127.0.0.1 > nul'
+        // Attendre que le conteneur soit prêt (ping 5 secondes)
+        bat 'ping -n 6 127.0.0.1 > nul'
 
         // Test simple avec curl
         bat 'curl http://localhost:83'
-
-        // Tu peux ici ajouter d'autres tests HTTP, intégration, etc.
     }
 
     stage('Push to Registry') {
-        docker.withRegistry('https://registry.gitlab.com', 'gitlab-registry-creds') {
-            img.push('latest')
-            img.push()
+        withCredentials([usernamePassword(
+            credentialsId: 'gitlab-registry-creds',
+            usernameVariable: 'GITLAB_USER',
+            passwordVariable: 'GITLAB_TOKEN'
+        )]) {
+            bat """
+                echo 🔐 Logging in to GitLab Registry...
+                docker login -u %GITLAB_USER% -p %GITLAB_TOKEN% https://registry.gitlab.com
+
+                echo 📦 Pushing version image...
+                docker push --disable-content-trust=true ${IMAGE_VERSION}
+
+                echo 📦 Pushing latest image...
+                docker push --disable-content-trust=true ${IMAGE_LATEST}
+            """
         }
     }
 
     stage('Clean Up') {
         // Arrête et supprime le conteneur
-        bat "docker rm -f ${CONTAINER_NAME}"
+        bat "docker rm -f ${CONTAINER_NAME} || echo Container ${CONTAINER_NAME} does not exist."
     }
 }
