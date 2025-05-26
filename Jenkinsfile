@@ -1,5 +1,3 @@
-def pipelineContext = [:]
-
 node {
     def registry = 'registry.gitlab.com'
     def registryProjet = 'registry.gitlab.com/mygroup4574346/myreg'
